@@ -148,7 +148,6 @@ sshkey --username=${deploy_user_name} "${deploy_user_key}"
 
   # Configure the SSH Service To Allow SSH After System Hardening
   sed -ri 's/^#?PermitRootLogin.*/PermitRootLogin no/'               /etc/ssh/sshd_config
-  #sed -ri 's/^#?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
   sed -ri 's/^#?X11Forwarding.*/X11Forwarding no/'                   /etc/ssh/sshd_config
   echo "DisableForwarding yes"                                    >> /etc/ssh/sshd_config
   echo "MaxAuthTries 4"                                           >> /etc/ssh/sshd_config
@@ -160,7 +159,7 @@ sshkey --username=${deploy_user_name} "${deploy_user_key}"
 
   # Configure the deploy user
   chage -m 1 -M 180 -W 14 -d $(date +%F) ${deploy_user_name}
-  
+
   # Update System
   dnf makecache
   dnf install epel-release -y
