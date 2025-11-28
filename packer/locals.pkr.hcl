@@ -117,7 +117,7 @@ locals {
     sockets                  = coalesce(var.packer_image.sockets, 1)
 
     # Hardware: Memory
-    ballooning_minimum       = coalesce(var.packer_image.cores, 0)
+    ballooning_minimum       = coalesce(var.packer_image.ballooning_minimum, 0)
     memory                   = coalesce(var.packer_image.memory, 2048)
     numa                     = coalesce(var.packer_image.numa, false)
 
@@ -166,9 +166,9 @@ locals {
                             )
     iso_target_extension  = coalesce(var.boot_iso.iso_target_extension, "iso")
     iso_target_path       = var.boot_iso.iso_target_path == null ? null : var.boot_iso.iso_target_path
-    keep_cdrom_device     = coalesce(var.boot_iso.iso_target_path, false)
-    type                  = coalesce(var.boot_iso.iso_target_path, "scsi")
-    unmount               = coalesce(var.boot_iso.iso_target_path, true)
+    keep_cdrom_device     = coalesce(var.boot_iso.keep_cdrom_device, false)
+    type                  = coalesce(var.boot_iso.type, "scsi")
+    unmount               = coalesce(var.boot_iso.unmount, true)
   }
 
 
@@ -263,17 +263,3 @@ locals {
   }
 
 }
-
-# locals {
-
-#   build_by          = "Built by: HashiCorp Packer ${packer.version}"
-#   build_date        =
-#   build_version     =
-#   build_description = "Version: ${local.build_version}\nBuilt on: ${local.build_date}\n${local.build_by}\nCloud-Init: ${var.vm_cloudinit}"
-#   vm_disk_type      = var.vm_disk_type == "virtio" ? "vda" : "sda"
-#   manifest_date     =
-#   manifest_path     = "${path.cwd}/manifests/"
-#   manifest_output   =
-
-#   vm_bios = var.vm_bios == "ovmf" ? var.vm_bios_firmware_path : null
-# }
