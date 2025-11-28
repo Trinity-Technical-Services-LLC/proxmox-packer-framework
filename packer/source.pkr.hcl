@@ -163,7 +163,7 @@ source "proxmox-iso" "packer_image" {
 
 
   dynamic "pci_devices" {
-    for_each = local.pci_devices == null ? null : local.pci_devices
+    for_each = local.pci_devices == null ? [] : local.pci_devices
     iterator = pci_device
 
     content {
