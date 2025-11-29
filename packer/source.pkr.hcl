@@ -1,5 +1,5 @@
 # ============================================================================================ #
-# - File: {root}\source.pkr.hcl                                             | Version: v1.0.0  #
+# - File: {root}/source.pkr.hcl                                             | Version: v1.0.0  #
 # --- [ Description ] ------------------------------------------------------------------------ #
 #                                                                                              #
 # ============================================================================================ #
@@ -8,17 +8,18 @@ source "proxmox-iso" "packer_image" {
 
   # Proxmox Configuration
   proxmox_url               = "https://${var.proxmox_hostname}:8006/api2/json"
-  username                  = "${var.proxmox_api_token_id}"
-  token                     = "${var.proxmox_api_token_secret}"
+  username                  = var.proxmox_api_token_id
+  token                     = var.proxmox_api_token_secret
 
   # SSH Configuration
+  communicator                = "ssh"
   ssh_ciphers                 = ["aes128-gcm@openssh.com", "aes128-ctr", "aes192-ctr", "aes256-ctr"]
-  ssh_host                    = "${var.network_adapters[0].ipv4_address}"
+  ssh_host                    = var.network_adapters[0].ipv4_address
   ssh_key_exchange_algorithms = ["ecdh-sha2-nistp256", "ecdh-sha2-nistp384", "ecdh-sha2-nistp521"]
-  ssh_password                = "${var.deploy_user_password}"
-  ssh_port                    = "22"
-  ssh_timeout                 = "30m"
-  ssh_username                = "${var.deploy_user_name}"
+  ssh_password                = var.deploy_user_password
+  ssh_port                    = 22
+  ssh_timeout                 = "15m"
+  ssh_username                = var.deploy_user_name
 
   # Proxmox Settings
   insecure_skip_tls_verify  = local.packer_image.insecure_skip_tls_verify
