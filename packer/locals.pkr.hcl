@@ -32,9 +32,9 @@ locals {
               deploy_user_name     = var.deploy_user_name
               deploy_user_password = var.deploy_user_password
               deploy_user_key      = var.deploy_user_key
-              os_language          = var.packer_image.os_language
-              os_keyboard          = var.packer_image.os_keyboard
-              os_timezone          = var.packer_image.os_timezone
+              os_language          = local.packer_image.os_language
+              os_keyboard          = local.packer_image.os_keyboard
+              os_timezone          = local.packer_image.os_timezone
 
               # Networking Settings
               device       = (
@@ -68,11 +68,17 @@ locals {
     install_method           = var.packer_image.install_method
 
     # Template Metadata
-    os_language              = coalesce(var.packer_image.os_language, "en_US")
-    os_keyboard              = coalesce(var.packer_image.os_keyboard, "us"   )
-    os_timezone              = coalesce(var.packer_image.os_timezone, "UTC"  )
+    os_language              = coalesce(
+      var.packer_image.os_language,
+      var.packer_image.os_family == "windows" ? "en-US" : "en_US.UTF-8"
+    )
+    os_keyboard              = coalesce(
+      var.packer_image.os_language,
+      var.packer_image.os_family == "windows" ? "en-US" : "en_US.UTF-8"
+    )
+    os_timezone              = coalesce(var.packer_image.os_timezone,"UTC")
     os_family                = var.packer_image.os_family
-    os_name                  = var.packer_image.os_name
+    os_distribution          = var.packer_image.os_distribution
     os_version               = var.packer_image.os_version
 
     # General Settings
@@ -90,7 +96,17 @@ locals {
 
     # Misc Settings
     disable_kvm              = coalesce(var.packer_image.disable_kvm, false)
-    machine                  = coalesce(var.packer_image.machine, "q35")
+    machine                  = coalesce(
+                                var.packer_image.machine,
+                                (
+                                  var.packer_image.os_family == "windows" &&
+                                  contains(
+                                    ["xp","w2k","w2k3","w2k8","vista","win7","win8"],
+                                    var.packer_image.os
+                                  )
+                                ) ? "pc" : null,
+                                "q35"
+                              )
     os                       = var.packer_image.os
     task_timeout             = coalesce(var.packer_image.task_timeout, "5m")
 
@@ -101,7 +117,7 @@ locals {
     boot_key_interval        = var.packer_image.boot_key_interval == null ? null : var.packer_image.boot_key_interval
     boot_keygroup_interval   = var.packer_image.boot_keygroup_interval == null ? null : var.packer_image.boot_keygroup_interval
     boot_wait                = coalesce(var.packer_image.boot_wait, "10s")
-    onboot                   = coalesce(var.packer_image.onboot, false)
+    onboot                   = false
 
     # VM Configuration: Cloud-Init
     cloud_init                = coalesce(var.packer_image.cloud_init, true)

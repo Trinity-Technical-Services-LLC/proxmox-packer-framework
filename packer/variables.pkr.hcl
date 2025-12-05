@@ -9,11 +9,11 @@
   variable "proxmox_hostname" {
     type        = string
     description = "FQDN or IP address of the target Proxmox node (single node in the cluster)."
-    sensitive   = false
+    sensitive   = true
 
     validation {
       condition     = length(var.proxmox_hostname) > 0
-      error_message = "proxmox_hostname must not be empty."
+      error_message = "The variable 'proxmox_hostname' must not be empty."
     }
   }
 
@@ -24,7 +24,7 @@
 
     validation {
       condition     = can(regex(".+@.+!.+", var.proxmox_api_token_id))
-      error_message = "proxmox_api_token_id must be in USER@REALM!TOKENID format, e.g. packer@pam!packer_pve_token."
+      error_message = "The variable 'proxmox_api_token_id' must be in USER@REALM!TOKENID format, e.g. packer@pam!packer_pve_token."
     }
   }
 
@@ -35,7 +35,7 @@
 
     validation {
       condition     = length(var.proxmox_api_token_secret) >= 16
-      error_message = "proxmox_api_token_secret appears too short; check that you are passing the full token secret."
+      error_message = "The variable 'proxmox_api_token_secret' appears too short; check that you are passing the full token secret."
     }
   }
 
@@ -57,7 +57,7 @@
 
     validation {
       condition     = length(var.deploy_user_name) > 0
-      error_message = "deploy_user_name must not be empty."
+      error_message = "The variable 'deploy_user_name' must not be empty."
     }
   }
 
@@ -68,7 +68,7 @@
 
     validation {
       condition     = length(var.deploy_user_password) > 0
-      error_message = "deploy_user_password must not be empty when used."
+      error_message = "The variable 'deploy_user_password' must not be empty when used."
     }
   }
 
@@ -79,7 +79,7 @@ variable "deploy_user_key" {
 
   validation {
     condition     = length(var.deploy_user_key) > 0
-    error_message = "deploy_user_password must not be empty when used."
+    error_message = "The variable 'deploy_user_password' must not be empty when used."
   }
 }
 
@@ -91,7 +91,10 @@ variable "deploy_user_key" {
 
     description = "Composite Proxmox VM/template configuration used by the proxmox-iso builder."
 
-    type = object({
+    type = object({ 
+
+      # 
+      insecure_skip_tls_verify = bool
 
       # OS Installation & Configuration
       install_method            = string
@@ -102,7 +105,7 @@ variable "deploy_user_key" {
       os_keyboard               = string
       os_timezone               = string
       os_family                 = string
-      os_name                   = string
+      os_distribution           = string
       os_version                = string
 
       # General Settings
@@ -160,94 +163,195 @@ variable "deploy_user_key" {
 
         validation {
           condition = contains(
-            [ "kickstart", "autoinstall", "unattend" ],
-            lower(var.packer_image.install_method)
+            ["kickstart", "autoinstall", "unattend"],
+            var.packer_image.install_method
           )
+
           error_message = <<-EOT
-            packer_image.install_method must be one of:
-              - kickstart   (RHEL/Rocky/Alma)
-              - autoinstall (Ubuntu)
-              - unattend    (Windows)
-            EOT
+            Invalid packer_image.install_method; it must be "kickstart", "autoinstall" or "unattend".
+          EOT
         }
 
       #endregion --- [ Validation: OS Installation & Configuration ] ------------------------- #
 
       #region ------ [ Validation: Template Metadata ] --------------------------------------- #
 
-        # os_family
+        # os_language
         validation {
-          condition = contains(
-            ["rhel", "ubuntu", "windows"],
-            lower(var.packer_image.os_family)
+          condition = (
+            var.packer_image.os_language == null
+            ? true
+            : (
+                # No leading or trailing whitespace, non-empty, sane length
+                trimspace(var.packer_image.os_language)
+                  == var.packer_image.os_language &&
+                length(var.packer_image.os_language) > 0 &&
+                length(var.packer_image.os_language) <= 64 &&
+
+                anytrue([
+                  # Linux (RHEL/Rocky/Ubuntu): POSIX locale (e.g. en_US, en_US.UTF-8, es_419.UTF-8, C.UTF-8)
+                  (
+                    var.packer_image.os_family == "linux" &&
+                    can(
+                      regex(
+                        "^(C|POSIX|[A-Za-z]{2,8}(_[A-Za-z0-9]{2,8})?(\\.[A-Za-z0-9-]+)?(@[A-Za-z0-9-]+)?)$",
+                        var.packer_image.os_language
+                      )
+                    )
+                  ),
+
+                  # Windows: BCP-47 language tag (e.g. en-US, fr-FR, zh-Hans-CN)
+                  (
+                    var.packer_image.os_family == "windows" &&
+                    can(
+                      regex(
+                        "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$",
+                        var.packer_image.os_language
+                      )
+                    )
+                  )
+                ])
+              )
           )
 
           error_message = <<-EOT
-            Invalid packer_image.os_family.
-            Allowed values are:
-              - rhel
-              - ubuntu
-              - windows
-
-            Use 'rhel' for RHEL-compatible distributions (RHEL, Rocky, Alma, etc.).
+            Invalid packer_image.os_language; a Linux locale such as "en_US.UTF-8" when os_family is "linux", or a Windows language tag such as "en-US" when os_family is "windows", with no leading or trailing whitespace and a maximum length of 64 characters.
           EOT
         }
 
-        # os_name
+
+        # os_keyboard
         validation {
           condition = (
-            # non-empty, safe characters
-            length(trimspace(var.packer_image.os_name)) > 0 &&
-            can(regex("^[A-Za-z0-9_.-]+$", var.packer_image.os_name)) &&
-            # must contain the os_family label somewhere (case-insensitive)
-            contains(
-              lower(var.packer_image.os_name),
-              lower(var.packer_image.os_family)
-            )
+            var.packer_image.os_keyboard == null
+            ? true
+            : (
+                # No leading or trailing whitespace
+                trimspace(var.packer_image.os_keyboard)
+                  == var.packer_image.os_keyboard &&
+
+                # Reasonable length
+                length(var.packer_image.os_keyboard) >= 2 &&
+                length(var.packer_image.os_keyboard) <= 32 &&
+
+                # Keyboard layout pattern: us, us-intl, de-latin1, etc.
+                can(
+                  regex(
+                    "^[A-Za-z0-9]{2,16}([_-][A-Za-z0-9]{2,16})*$",
+                    var.packer_image.os_keyboard
+                  )
+                )
+              )
           )
 
           error_message = <<-EOT
-            Invalid packer_image.os_name.
+            Invalid packer_image.os_keyboard; it must be null to use the
+            default or a keyboard layout string such as "us", "us-intl" or
+            "de-latin1", with no leading or trailing whitespace and a maximum
+            length of 32 characters.
+          EOT
+        }
 
-            Requirements:
-              - must be non-empty
-              - may only contain letters, digits, '.', '_' and '-'
-              - must include the os_family string (e.g.:
-                  os_family = "rhel"    -> os_name might be "rhel-8" or "rhel-8-minimal"
-                  os_family = "ubuntu"  -> os_name might be "ubuntu-22.04"
-                  os_family = "windows" -> os_name might be "windows-server-2022")
+        # os_family
+        validation {
+          condition = contains(
+            ["linux", "windows"],
+            var.packer_image.os_family
+          )
+
+          error_message = <<-EOT
+            Invalid packer_image.os_family; it must be "linux" or "windows".
+          EOT
+        }
+
+        # os_distribution
+        validation {
+          condition = anytrue([
+            (
+              var.packer_image.os_family == "linux" &&
+              contains(
+                [ "rocky", "rhel", "ubuntu" ],
+                var.packer_image.os_distribution
+              )
+            ),
+            (
+              var.packer_image.os_family == "windows" &&
+              contains(
+                [ "server", "desktop" ],
+                var.packer_image.os_distribution
+              )
+            )
+          ])
+
+          error_message = <<-EOT
+            Invalid packer_image.os_distribution for the selected os_family; for
+            os_family "linux" it must be "rocky", "rhel" or "ubuntu", and for
+            os_family "windows" it must be "server" or "desktop".
           EOT
         }
 
         # os_version
         validation {
           condition = anytrue([
-            # RHEL-family (RHEL, Rocky, Alma, etc.): major.minor (e.g. 8.9)
+            # Linux (Rocky/RHEL): major.minor (e.g. 8.9, 9.3)
             (
-              lower(var.packer_image.os_family) == "rhel" &&
-              can(regex("^[0-9]+\\.[0-9]+$", var.packer_image.os_version))
+              lower(trimspace(var.packer_image.os_family)) == "linux" &&
+              contains(
+                ["rocky", "rhel"],
+                lower(trimspace(var.packer_image.os_distribution))
+              ) &&
+              can(
+                regex(
+                  "^[0-9]+\\.[0-9]+$",
+                  trimspace(var.packer_image.os_version)
+                )
+              )
             ),
 
-            # Ubuntu: YY.MM (e.g. 22.04, 20.04)
+            # Linux (Ubuntu): YY.MM (e.g. 22.04, 20.04)
             (
-              lower(var.packer_image.os_family) == "ubuntu" &&
-              can(regex("^[0-9]{2}\\.[0-9]{2}$", var.packer_image.os_version))
+              lower(trimspace(var.packer_image.os_family)) == "linux" &&
+              lower(trimspace(var.packer_image.os_distribution)) == "ubuntu" &&
+              can(
+                regex(
+                  "^[0-9]{2}\\.[0-9]{2}$",
+                  trimspace(var.packer_image.os_version)
+                )
+              )
             ),
 
-            # Windows: 2–4 digit numeric version (e.g. 2019, 2022, 10, 11)
+            # Windows Desktop: 2-digit version (e.g. 10, 11)
             (
-              lower(var.packer_image.os_family) == "windows" &&
-              can(regex("^[0-9]{2,4}$", var.packer_image.os_version))
+              lower(trimspace(var.packer_image.os_family)) == "windows" &&
+              lower(trimspace(var.packer_image.os_distribution)) == "desktop" &&
+              can(
+                regex(
+                  "^[0-9]{2}$",
+                  trimspace(var.packer_image.os_version)
+                )
+              )
+            ),
+
+            # Windows Server: 4-digit year with optional 1–2 char suffix (e.g. 2019, 2022, 2016R2)
+            (
+              lower(trimspace(var.packer_image.os_family)) == "windows" &&
+              lower(trimspace(var.packer_image.os_distribution)) == "server" &&
+              can(
+                regex(
+                  "^[0-9]{4}([A-Za-z0-9]{1,2})?$",
+                  trimspace(var.packer_image.os_version)
+                )
+              )
             )
           ])
 
           error_message = <<-EOT
-            Invalid packer_image.os_version for the selected os_family.
-
-            Expected formats:
-              - os_family = "rhel"    -> os_version like "8.9", "9.3"
-              - os_family = "ubuntu"  -> os_version like "22.04", "20.04"
-              - os_family = "windows" -> os_version like "2019", "2022", "10", "11"
+            Invalid packer_image.os_version for the selected os_family and
+            os_distribution; for linux with rocky or rhel it must look like
+            "8.9" or "9.3", for linux with ubuntu it must look like "22.04" or
+            "20.04", for windows with desktop it must look like "10" or "11",
+            and for windows with server it must look like "2019", "2022" or
+            "2016R2".
           EOT
         }
 
@@ -258,115 +362,147 @@ variable "deploy_user_key" {
         # template_description
         validation {
           condition = (
-            length(trimspace(var.packer_image.template_description)) > 0 &&
+            # No leading or trailing whitespace
+            trimspace(var.packer_image.template_description)
+              == var.packer_image.template_description &&
+
+            # Non-empty after trimming
+            length(var.packer_image.template_description) > 0 &&
+
+            # Raw value must not exceed 1024 characters
             length(var.packer_image.template_description) <= 1024
           )
 
           error_message = <<-EOT
-            Invalid packer_image.template_description.
-            Description must be non-empty and at most 1024 characters.
+            Invalid packer_image.template_description; it must be non-empty,
+            no longer than 1024 characters, and must not have leading or
+            trailing whitespace.
           EOT
         }
 
         # template_name
         validation {
-          condition = can(
-            regex(
-              "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$",
-              var.packer_image.template_name,
+          condition = (
+            # No leading or trailing whitespace
+            trimspace(var.packer_image.template_name)
+              == var.packer_image.template_name &&
+
+            # Must match DNS-label style rules
+            can(
+              regex(
+                "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$",
+                var.packer_image.template_name
+              )
             )
           )
 
           error_message = <<-EOT
-            Invalid packer_image.template_name.
-            Template names must follow the same rules as VM names:
-              - 1–63 characters
-              - letters, digits, and '-'
-              - '-' cannot be the first or last character
+            Invalid packer_image.template_name; it must be 1 to 63 characters
+            long, contain only letters, digits or '-', must not start or end
+            with '-', and must not have leading or trailing whitespace.
           EOT
         }
 
         # vm_id
         validation {
           condition = (
-            var.packer_image.vm_id >= 900000000 &&
-            var.packer_image.vm_id <= 999999999
+            var.packer_image.vm_id >= 10000 &&
+            var.packer_image.vm_id <= 10999 &&
+            var.packer_image.vm_id == floor(var.packer_image.vm_id)
           )
 
           error_message = <<-EOT
-            Invalid packer_image.vm_id.
-            Proxmox VM IDs must be between 100 and 999999999.
+            Invalid packer_image.vm_id; it must be an integer between 10,000 and 10,999 inclusive.
           EOT
         }
 
         # pool
         validation {
-          condition = can(
-            regex(
-              "^[A-Za-z][A-Za-z0-9_.-]*[A-Za-z0-9]$",
-              var.packer_image.pool,
+          condition = (
+            # No leading or trailing whitespace
+            trimspace(var.packer_image.pool) == var.packer_image.pool &&
+
+            # Must satisfy Proxmox-style ID shape
+            can(
+              regex(
+                "^[A-Za-z][A-Za-z0-9_.-]*[A-Za-z0-9]$",
+                var.packer_image.pool
+              )
             )
           )
 
           error_message = <<-EOT
-            Invalid packer_image.pool.
-            Pool IDs must:
-              - start with a letter
-              - end with a letter or digit
-              - only contain letters, digits, '_', '-' and '.'
+            Invalid packer_image.pool; it must start with a letter, end with a
+            letter or digit, contain only letters, digits, '_', '-' or '.', and
+            must not have leading or trailing whitespace.
           EOT
         }
 
         # node
         validation {
-          condition = can(
-            regex(
-              "^[A-Za-z][A-Za-z0-9_.-]*[A-Za-z0-9]$",
-              var.packer_image.node,
+          condition = (
+            # No leading or trailing whitespace
+            trimspace(var.packer_image.node) == var.packer_image.node &&
+
+            # Must satisfy node name character rules
+            can(
+              regex(
+                "^[A-Za-z][A-Za-z0-9_.-]*[A-Za-z0-9]$",
+                var.packer_image.node
+              )
             )
           )
 
           error_message = <<-EOT
-            Invalid packer_image.node.
-            Node names must:
-              - start with a letter
-              - end with a letter or digit
-              - only contain letters, digits, '_', '-' and '.'
+            Invalid packer_image.node; it must start with a letter, end with a
+            letter or digit, contain only letters, digits, '_', '-' or '.', and
+            must not have leading or trailing whitespace.
           EOT
         }
 
         # vm_name
         validation {
-          condition = can(
-            regex(
-              "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$",
-              var.packer_image.vm_name,
+          condition = (
+            trimspace(var.packer_image.vm_name)
+              == var.packer_image.vm_name &&
+
+            can(
+              regex(
+                "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$",
+                var.packer_image.vm_name
+              )
             )
           )
 
           error_message = <<-EOT
-            Invalid packer_image.vm_name.
-            VM names must be valid DNS hostnames:
-              - 1–63 characters
-              - letters, digits, and '-'
-              - '-' cannot be the first or last character
+            Invalid packer_image.vm_name; it must be a valid DNS label between
+            1 and 63 characters, use only lowercase letters, digits or '-', must
+            not start or end with '-', and must not have leading or trailing
+            whitespace.
           EOT
         }
 
-
         # tags
         validation {
-          condition = alltrue([
-            for t in var.packer_image.tags :
-            can(regex("^[A-Za-z0-9_.+-]+$", t)) && length(t) > 0
-          ])
+          condition = (
+            # Require at least one tag
+            length(var.packer_image.tags) > 0 &&
+
+            # Each tag must satisfy character, length, and whitespace rules
+            alltrue([
+              for t in var.packer_image.tags :
+              trimspace(t) == t &&
+              length(t) > 0 &&
+              length(t) <= 63 &&
+              can(regex("^[A-Za-z0-9_.+-]+$", t))
+            ])
+          )
 
           error_message = <<-EOT
-            Invalid packer_image.tags.
-            Each tag must be non-empty and may only contain:
-              - letters (a–z, A–Z)
-              - digits (0–9)
-              - '_', '-', '+', '.'
+            Invalid packer_image.tags; the list must contain at least one tag
+            and each tag must be non-empty, no longer than 63 characters, may
+            contain only letters, digits, '_', '-' '+' or '.', and must not
+            have leading or trailing whitespace.
           EOT
         }
 
@@ -374,100 +510,116 @@ variable "deploy_user_key" {
 
       #region ------ [ Validation: QEMU Agent ] ---------------------------------------------- #
 
+        # qemu_additional_args
         validation {
           condition = (
+            # Allow completely empty value
             length(var.packer_image.qemu_additional_args) == 0 ||
-            can(regex("^[^\\n;]{1,512}$", var.packer_image.qemu_additional_args))
+
+            # Otherwise enforce strict shape
+            (
+              # No leading or trailing whitespace
+              trimspace(var.packer_image.qemu_additional_args)
+                == var.packer_image.qemu_additional_args &&
+
+              # Max 512 characters in the raw value
+              length(var.packer_image.qemu_additional_args) <= 512 &&
+
+              # Single line, no ';' characters
+              can(
+                regex(
+                  "^[^\\n;]+$",
+                  var.packer_image.qemu_additional_args
+                )
+              )
+            )
           )
 
           error_message = <<-EOT
-            packer_image.qemu_additional_args should normally be empty.
-
-            If you set it, it must:
-              - be a single line (no newlines)
-              - not contain ';'
-              - be at most 512 characters long
-
-            This keeps QEMU arguments manageable and reduces the risk of malformed or
-            unsafe command lines.
+            Invalid packer_image.qemu_additional_args; it should normally be
+            empty, but if set it must be a single line with no leading or
+            trailing whitespace, no ';' characters or newline characters, and
+            no longer than 512 characters.
           EOT
         }
-
 
       #endregion --- [ Validation: QEMU Agent ] ---------------------------------------------- #
 
       #region ------ [ Validation: Misc Settings ] ------------------------------------------- #
 
-        # disable_kvm: None needed; its yes/no.
-
         # machine
         validation {
-          condition = contains(["pc", "q35"], lower(var.packer_image.machine))
+          condition = (
+            # Must be exactly one of the supported machine types
+            contains(
+              ["pc", "q35"],
+              var.packer_image.machine
+            )
+          )
 
           error_message = <<-EOT
-            Invalid packer_image.machine.
-            Supported machine types are:
-              - pc
-              - q35
+            Invalid packer_image.machine; it must be exactly "pc" or "q35".
           EOT
         }
 
         # os
         validation {
-          condition = anytrue([
-            # RHEL / Ubuntu -> Linux 2.6+ ostype
-            (lower(var.packer_image.os_family) == "rhel"   &&
-            lower(var.packer_image.os) == "l26"),
-            (lower(var.packer_image.os_family) == "ubuntu" &&
-            lower(var.packer_image.os) == "l26"),
+          condition = (
+            # No leading or trailing whitespace
+            trimspace(var.packer_image.os) == var.packer_image.os &&
 
-            # Windows -> one of the known Windows ostype codes
-            (
-              lower(var.packer_image.os_family) == "windows" &&
-              contains(
-                [
-                  "wxp", "w2k", "w2k3", "w2k8", "wvista",
-                  "win7", "win8", "win10", "win11"
-                ],
-                lower(var.packer_image.os)
+            anytrue([
+              # Linux -> Linux 2.6+ ostype
+              (
+                var.packer_image.os_family == "linux" &&
+                var.packer_image.os == "l26"
+              ),
+
+              # Windows -> one of the known Windows ostype codes
+              (
+                var.packer_image.os_family == "windows" &&
+                contains(
+                  [
+                    "wxp", "w2k", "w2k3", "w2k8", "wvista",
+                    "win7", "win8", "win10", "win11"
+                  ],
+                  var.packer_image.os
+                )
               )
-            )
-          ])
+            ])
+          )
 
           error_message = <<-EOT
-            Invalid packer_image.os for the selected os_family.
-
-            Expected:
-              - os_family = "rhel"   -> os = "l26"
-              - os_family = "ubuntu" -> os = "l26"
-              - os_family = "windows" -> one of:
-                  wxp, w2k, w2k3, w2k8, wvista, win7, win8, win10, win11
-
-            Adjust this list if your Proxmox cluster or plugin supports additional ostype
-            codes (for example, new Windows or Linux variants).
+            Invalid packer_image.os for the selected os_family; for os_family
+            "linux" the os must be "l26", and for os_family "windows" the os
+            must be one of "wxp", "w2k", "w2k3", "w2k8", "wvista", "win7",
+            "win8", "win10" or "win11".
           EOT
         }
 
         # task_timeout
         validation {
-          condition = can(
-            regex(
-              "^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$",
-              trimspace(var.packer_image.task_timeout)
+          condition = (
+            trimspace(var.packer_image.task_timeout)
+              == var.packer_image.task_timeout &&
+
+            # Reasonable upper bound on length
+            length(var.packer_image.task_timeout) <= 128 &&
+
+            can(
+              regex(
+                "^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$",
+                var.packer_image.task_timeout
+              )
             )
           )
 
           error_message = <<-EOT
-            Invalid packer_image.task_timeout.
-            Use a Go-style duration string, for example:
-              - "30s"
-              - "5m"
-              - "10m"
-              - "1h30m"
+            Invalid packer_image.task_timeout; it must be a valid Go-style
+            duration string such as "30s", "5m", "10m" or "1h30m", with no
+            leading or trailing whitespace and no longer than 128 characters.
           EOT
         }
-
-
 
       #endregion --- [ Validation: Misc Settings ] ------------------------------------------- #
 
@@ -481,120 +633,119 @@ variable "deploy_user_key" {
           )
 
           error_message = <<-EOT
-            Invalid packer_image.bios.
-            Supported values are:
-              - seabios  (legacy BIOS)
-              - ovmf     (UEFI firmware)
-
-            See the Proxmox ISO builder documentation: bios can be set to
-            'ovmf' or 'seabios' only.
+            Invalid packer_image.bios; supported values are "seabios" for legacy BIOS and "ovmf" for UEFI firmware.
           EOT
         }
 
-        # boot
+        # bios
         validation {
           condition = (
-            length(trimspace(var.packer_image.boot)) == 0 ||
-            can(
-              regex(
-                "^order=[A-Za-z0-9._-]+(;[A-Za-z0-9._-]+)*$",
-                trimspace(var.packer_image.boot)
-              )
+            # Must be exactly one of the supported BIOS types
+            contains(
+              ["seabios", "ovmf"],
+              var.packer_image.bios
             )
           )
 
           error_message = <<-EOT
-            Invalid packer_image.boot.
-
-            When set, boot must use the Proxmox 'order=' syntax, for example:
-              order=virtio0;ide2;net0
-
-            Leave it empty to let Proxmox/Packer use the default boot order.
+            Invalid packer_image.bios; it must be exactly "seabios" for legacy
+            BIOS or "ovmf" for UEFI firmware.
           EOT
         }
+
 
         # boot_key_interval
         validation {
           condition = (
-            length(trimspace(var.packer_image.boot_key_interval)) == 0 ||
-            can(
-              regex(
-                "^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$",
+            var.packer_image.boot_key_interval == null
+            ? true
+            : (
+                # No leading or trailing whitespace
                 trimspace(var.packer_image.boot_key_interval)
+                  == var.packer_image.boot_key_interval &&
+
+                # Reasonable upper bound on length
+                length(var.packer_image.boot_key_interval) <= 128 &&
+
+                # Must be a valid Go-style duration (e.g. "250ms", "5s", "1m30s")
+                can(
+                  regex(
+                    "^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$",
+                    var.packer_image.boot_key_interval
+                  )
+                )
               )
-            )
           )
 
           error_message = <<-EOT
-            Invalid packer_image.boot_key_interval.
-            Use a Go-style duration string, for example:
-              "250ms", "5s", "1m30s"
-            Leave it empty to use the builder default.
+            Invalid packer_image.boot_key_interval; it must be null to use the
+            builder default or a valid Go-style duration string such as "250ms",
+            "5s" or "1m30s", with no leading or trailing whitespace and no
+            longer than 128 characters.
           EOT
         }
 
         # boot_keygroup_interval
         validation {
           condition = (
-            length(trimspace(var.packer_image.boot_keygroup_interval)) == 0 ||
-            can(
-              regex(
-                "^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$",
+            var.packer_image.boot_keygroup_interval == null
+            ? true
+            : (
+                # No leading or trailing whitespace
                 trimspace(var.packer_image.boot_keygroup_interval)
+                  == var.packer_image.boot_keygroup_interval &&
+
+                # Reasonable upper bound on length
+                length(var.packer_image.boot_keygroup_interval) <= 10 &&
+
+                # Must be a valid Go-style duration (e.g. "250ms", "5s", "1m30s")
+                can(
+                  regex(
+                    "^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$",
+                    var.packer_image.boot_keygroup_interval
+                  )
+                )
               )
-            )
           )
 
           error_message = <<-EOT
-            Invalid packer_image.boot_keygroup_interval.
-            Use a Go-style duration string, for example:
-              "250ms", "5s", "1m30s"
-            Leave it empty to use the builder default.
+            Invalid packer_image.boot_keygroup_interval; it must be null to use
+            the builder default or a valid Go-style duration string such as
+            "250ms", "5s" or "1m30s", with no leading or trailing whitespace and
+            no longer than 10 characters.
           EOT
         }
 
-        # boot_wait
-        validation {
-          condition = (
-            length(trimspace(var.packer_image.boot_wait)) == 0 ||
-            can(
-              regex(
-                "^-?([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$",
-                trimspace(var.packer_image.boot_wait)
-              )
-            )
-          )
-
-          error_message = <<-EOT
-            Invalid packer_image.boot_wait.
-            Use a Go-style duration string, for example:
-              "10s", "30s", "1m30s"
-            To effectively set boot_wait to 0s, use a small negative duration such as "-1s".
-          EOT
-        }
 
         # boot_command
         validation {
-          condition = alltrue([
-            for cmd in var.packer_image.boot_command :
-            length(trimspace(cmd)) > 0 &&
-            length(cmd) <= 512 &&
-            !strcontains(cmd, "\n")
-          ])
+          condition = (
+            # Require at least one boot command
+            length(var.packer_image.boot_command) > 0 &&
+
+            alltrue([
+              for cmd in var.packer_image.boot_command :
+
+              # Non-empty
+              length(cmd) > 0 &&
+
+              # At most 512 characters
+              length(cmd) <= 512 &&
+
+              # No newline or carriage-return characters
+              !strcontains(cmd, "\n") &&
+              !strcontains(cmd, "\r")
+            ])
+          )
 
           error_message = <<-EOT
-            Invalid packer_image.boot_command entry.
-
-            Each element in boot_command must:
-              - be non-empty
-              - be at most 512 characters
-              - not contain newline characters
-
-            Use multiple entries in the list instead of embedding newlines, and use
-            tokens like <enter>, <wait>, etc. as documented in the Packer boot
-            command reference.
+            Invalid packer_image.boot_command; the list must contain at least
+            one entry and each entry must be non-empty, no longer than 512
+            characters, must not have leading or trailing whitespace, and must
+            not contain newline or carriage-return characters.
           EOT
         }
+
 
       #endregion --- [ Validation: VM Configuration: Boot Settings ] ------------------------- #
 
@@ -602,24 +753,31 @@ variable "deploy_user_key" {
 
         # cloud_init_disk_type
         validation {
-            # If cloud_init is disabled, we don't care what the disk type is (it's ignored)
-          var.packer_image.cloud_init == false ||
+          condition = (
+            # Allow any value if Cloud-Init is disabled
+            var.packer_image.cloud_init == false ||
 
-          condition = contains(
-            ["scsi", "sata", "ide"],
-            lower(var.packer_image.cloud_init_disk_type)
+            # When enabled, enforce strict, canonical values
+            (
+              # No leading or trailing whitespace
+              trimspace(var.packer_image.cloud_init_disk_type)
+                == var.packer_image.cloud_init_disk_type &&
+
+              # Non-empty
+              length(var.packer_image.cloud_init_disk_type) > 0 &&
+
+              # Must be exactly one of the supported types
+              contains(
+                ["scsi", "sata", "ide"],
+                var.packer_image.cloud_init_disk_type
+              )
+            )
           )
 
           error_message = <<-EOT
-            Invalid packer_image.cloud_init_disk_type.
-
-            Supported Cloud-Init disk types are:
-              - scsi
-              - sata
-              - ide
-
-            For modern guests, 'scsi' is generally preferred for performance and
-            compatibility. 'ide' is mostly for legacy scenarios.
+            Invalid packer_image.cloud_init_disk_type; when cloud_init is true
+            it must be exactly "scsi", "sata" or "ide" with no leading or
+            trailing whitespace.
           EOT
         }
 
@@ -640,20 +798,10 @@ variable "deploy_user_key" {
           )
 
           error_message = <<-EOT
-            Invalid packer_image.cloud_init_storage_pool.
-
-            When cloud_init is true, cloud_init_storage_pool must:
-              - be non-empty
-              - start with a letter
-              - end with a letter or digit
-              - only contain letters, digits, '_', '-' and '.'
-
-            Example values:
-              - local
-              - local-lvm
-              - nfs-templates
+            Invalid packer_image.cloud_init_storage_pool; when cloud_init is true it must be non-empty, start with a letter, end with a letter or digit, and contain only letters, digits, '_', '-' or '.'.
           EOT
         }
+
 
       #endregion --- [ Validation: VM Configuration: Cloud-Init ] ---------------------------- #
 
@@ -662,44 +810,57 @@ variable "deploy_user_key" {
         # cores, sockets
         validation {
           condition = (
-            var.packer_image.cores   >= 1 &&
-            var.packer_image.sockets >= 1 &&
-            floor(var.packer_image.cores)   == var.packer_image.cores &&
-            floor(var.packer_image.sockets) == var.packer_image.sockets &&
-            (var.packer_image.cores * var.packer_image.sockets) <= 96
+            # Derive effective values for validation, treating null as 1
+            floor(coalesce(var.packer_image.cores, 1)) ==
+              coalesce(var.packer_image.cores, 1) &&
+            floor(coalesce(var.packer_image.sockets, 1)) ==
+              coalesce(var.packer_image.sockets, 1) &&
+
+            # 1) cores check: integer in [1, 96]
+            coalesce(var.packer_image.cores, 1) >= 1 &&
+            coalesce(var.packer_image.cores, 1) <= 96 &&
+
+            # 2) sockets check: integer in [1, 96]
+            coalesce(var.packer_image.sockets, 1) >= 1 &&
+            coalesce(var.packer_image.sockets, 1) <= 96 &&
+
+            # 3) combined topology check: cores * sockets <= 96
+            (coalesce(var.packer_image.cores, 1) *
+             coalesce(var.packer_image.sockets, 1)) <= 96
           )
 
           error_message = <<-EOT
-            Invalid CPU topology in packer_image.cores / packer_image.sockets.
-
-            Requirements:
-              - cores   must be an integer >= 1
-              - sockets must be an integer >= 1
-              - cores * sockets must be <= 96
-
-            Adjust cores and/or sockets so that their product does not exceed 96.
+            Invalid CPU topology in packer_image.cores or packer_image.sockets;
+            each value must be an integer between 1 and 96 (null is treated as 1)
+            and their product must not exceed 96.
           EOT
         }
 
         # cpu_type
         validation {
-          condition = contains(
-            [ "host", "x86-64-v2-aes", "kvm64" ],
-            lower(var.packer_image.cpu_type)
+          condition = (
+            var.packer_image.cpu_type == null
+            ? true
+            : (
+                # No leading or trailing whitespace
+                trimspace(var.packer_image.cpu_type)
+                  == var.packer_image.cpu_type &&
+
+                # Must be exactly one of the approved CPU types
+                contains(
+                  ["host", "x86-64-v2-aes", "kvm64"],
+                  var.packer_image.cpu_type
+                )
+              )
           )
 
           error_message = <<-EOT
-            Invalid packer_image.cpu_type.
-
-            Allowed values (organization-approved) are:
-              - x86-64-v2-aes
-              - host
-              - kvm64
-
-            These correspond to the QEMU/Proxmox CPU models documented as safe defaults
-            or recommended starting points. If you need a different CPU model
-            (for example a specific Intel or AMD microarchitecture), extend the
-            local.approved_cpu_types list explicitly.
+            Invalid packer_image.cpu_type; it must be null to use the default
+            or exactly "x86-64-v2-aes", "host" or "kvm64" with no leading or
+            trailing whitespace. These correspond to QEMU/Proxmox CPU models
+            that are organization-approved safe defaults or starting points; if
+            you require a different model, it must be explicitly added to the
+            approved list.
           EOT
         }
 
@@ -710,33 +871,31 @@ variable "deploy_user_key" {
         # memory, ballooning_minimum
         validation {
           condition = (
-            # memory: integer MB, at least 256 MB
-            var.packer_image.memory >= 256 &&
-            floor(var.packer_image.memory) == var.packer_image.memory &&
+            # Use effective values for validation, treating null as defaults:
+            #   memory            -> 2048 MB
+            #   ballooning_minimum -> 0 MB
+            floor(coalesce(var.packer_image.memory, 2048))
+              == coalesce(var.packer_image.memory, 2048) &&
+            floor(coalesce(var.packer_image.ballooning_minimum, 0))
+              == coalesce(var.packer_image.ballooning_minimum, 0) &&
 
-            # ballooning_minimum: integer MB, >= 0
-            var.packer_image.ballooning_minimum >= 0 &&
-            floor(var.packer_image.ballooning_minimum)
-              == var.packer_image.ballooning_minimum &&
+            # memory: integer MB, between 256 MB and 1,048,576 MB (1 TB)
+            coalesce(var.packer_image.memory, 2048) >= 256 &&
+            coalesce(var.packer_image.memory, 2048) <= 1048576 &&
 
-            # relationship: min <= max
-            var.packer_image.ballooning_minimum <= var.packer_image.memory
+            # ballooning_minimum: integer MB, between 0 and effective memory
+            coalesce(var.packer_image.ballooning_minimum, 0) >= 0 &&
+            coalesce(var.packer_image.ballooning_minimum, 0)
+              <= coalesce(var.packer_image.memory, 2048)
           )
 
           error_message = <<-EOT
-            Invalid memory configuration in packer_image.memory /
-            packer_image.ballooning_minimum.
-
-            Requirements:
-              - memory (max RAM) must be an integer >= 256 (MB)
-              - ballooning_minimum (min RAM) must be an integer >= 0 (MB)
-              - ballooning_minimum must be <= memory
-              - set ballooning_minimum = 0 to disable ballooning
-
-            Proxmox interprets:
-              - memory             as the maximum RAM the VM can use (in MB)
-              - ballooning_minimum as the minimum guaranteed RAM when ballooning
-                is enabled.
+            Invalid memory configuration in packer_image.memory or
+            packer_image.ballooning_minimum; memory must be an integer between
+            256 and 1,048,576 MB (null is treated as 2,048 MB), and
+            ballooning_minimum must be an integer between 0 MB and memory (null
+            is treated as 0 MB); you can set ballooning_minimum to 0 or null to
+            effectively disable ballooning.
           EOT
         }
 
@@ -755,7 +914,7 @@ variable "deploy_user_key" {
               "megasas",
               "pvscsi",
             ],
-            lower(var.packer_image.scsi_controller)
+            var.packer_image.scsi_controller
           )
 
           error_message = <<-EOT
@@ -827,8 +986,8 @@ variable "deploy_user_key" {
     })
 
     validation {
-      condition     = can(regex("^[a-z0-9]+:[0-9a-fA-F]+$", var.boot_iso.iso_checksum))
-      error_message = "boot_iso.iso_checksum must include algorithm and hex digest (e.g. sha256:abc123...)."
+      condition = can(regex("^[a-z0-9]+:[0-9a-fA-F]+$", var.boot_iso.iso_checksum))
+      error_message = "Invalid boot_iso.iso_checksum; it must include an algorithm and hex digest (for example 'sha256:abc123...')."
     }
   }
 
@@ -932,75 +1091,13 @@ variable "deploy_user_key" {
     })
   }
 
-#endregion --- [ Packer Image ] -------------------------------------------------------------- #
+  variable "vm_disk_use_swap" {
+    type        = bool
+    description = "Whether to use a swap partition."
+  }
 
-#region ------ [ Virtual Machine (VM) Settings ] --------------------------------------------- #
-
-    # variable "vm_disk_partitions" {
-    #   type = list(object({
-    #     name = string
-    #     size = number
-    #     format = object({
-    #       label  = string
-    #       fstype = string
-    #     })
-    #     mount = object({
-    #       path    = string
-    #       options = string
-    #     })
-    #     volume_group = string
-    #   }))
-    #   description = "The disk partitions for the virtual disk."
-    # }
-
-    # variable "vm_disk_lvm" {
-    #   type = list(object({
-    #     name    = string
-    #     partitions = list(object({
-    #       name = string
-    #       size = number
-    #       format = object({
-    #         label  = string
-    #         fstype = string
-    #       })
-    #       mount = object({
-    #         path    = string
-    #         options = string
-    #       })
-    #     }))
-    #   }))
-    #   description = "The LVM configuration for the virtual disk."
-    #   default     = []
-    # }
-
-  #endregion --- [ Virtual Machine (VM) Settings - Storage ] --------------------------------- #
-
-variable "vm_disk_use_swap" {
-  type        = bool
-  description = "Whether to use a swap partition."
-}
-
-variable "vm_disk_partitions" {
-  type = list(object({
-    name = string
-    size = number
-    format = object({
-      label  = string
-      fstype = string
-    })
-    mount = object({
-      path    = string
-      options = string
-    })
-    volume_group = string
-  }))
-  description = "The disk partitions for the virtual disk."
-}
-
-variable "vm_disk_lvm" {
-  type = list(object({
-    name    = string
-    partitions = list(object({
+  variable "vm_disk_partitions" {
+    type = list(object({
       name = string
       size = number
       format = object({
@@ -1011,8 +1108,29 @@ variable "vm_disk_lvm" {
         path    = string
         options = string
       })
+      volume_group = string
     }))
-  }))
-  description = "The LVM configuration for the virtual disk."
-  default     = []
-}
+    description = "The disk partitions for the virtual disk."
+  }
+
+  variable "vm_disk_lvm" {
+    type = list(object({
+      name    = string
+      partitions = list(object({
+        name = string
+        size = number
+        format = object({
+          label  = string
+          fstype = string
+        })
+        mount = object({
+          path    = string
+          options = string
+        })
+      }))
+    }))
+    description = "The LVM configuration for the virtual disk."
+    default     = []
+  }
+
+#endregion --- [ Packer Image ] -------------------------------------------------------------- #

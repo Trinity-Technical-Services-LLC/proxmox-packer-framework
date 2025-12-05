@@ -9,7 +9,7 @@ packer {
 
 # Homepage: https://developer.hashicorp.com/packer/install
 # GitHub:   https://github.com/hashicorp/packer
-  required_version = "1.14.3"
+  required_version = "1.14.2"
 
   required_plugins {
 
