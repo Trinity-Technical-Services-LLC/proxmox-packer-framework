@@ -28,21 +28,16 @@ network --bootproto=dhcp --device=${device}
 ### Lock the root account.
 rootpw --lock
 
-### Configure firewall settings for the system.
-### --enabled	reject incoming connections that are not in response to outbound requests
-### --ssh	allow sshd service through the firewall
+# Configure firewall settings for the system (optional)
+# --enabled	reject incoming connections that are not in response to outbound requests
+# --ssh		allow sshd service through the firewall
 firewall --enabled --ssh
 
-### Sets up the authentication options for the system.
-### The SSSD profile sets sha512 to hash passwords. Passwords are shadowed by default
-### See the manual page for authselect-profile for a complete list of possible options.
-authselect select sssd
-
-### Sets the state of SELinux on the installed system.
-### Defaults to enforcing.
+# State of SELinux on the installed system (optional)
+# Defaults to enforcing
 selinux --enforcing
 
-### Sets the system time zone.
+# Set the system time zone (required)
 timezone ${os_timezone}
 
 #region ------ [ Storage Configuration ] ------------------------------------------------------ #
@@ -172,6 +167,6 @@ sshkey --username=${deploy_user_name} "${deploy_user_key}"
 
 %end
 
-### Reboot after the installation is complete.
-### --eject attempt to eject the media before rebooting.
+# Reboot after the installation is complete (optional)
+# --eject	attempt to eject CD or DVD media before rebooting
 reboot --eject
