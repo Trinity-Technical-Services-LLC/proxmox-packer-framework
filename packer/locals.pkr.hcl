@@ -1,14 +1,15 @@
-# ============================================================================================ #
-# - File: {root}\locals.pkr.hcl                                              | Version: v1.0.0 #
-# --- [ Description ] ------------------------------------------------------------------------ #
-#   The locals file is the "brains" of the playbook. It's responsible for building the final   #
-# object that gets passed as directly as possible to the "proxmox-iso" source.                 #
-# ============================================================================================ #
+# ============================================================================================= #
+# - File: .\locals.pkr.hcl                                                    | Version: v1.0.0 #
+# --- [ Description ] ------------------------------------------------------------------------- #
+#   The locals file is the "brains" of the playbook. It's responsible for building the final    #
+# object that gets passed as directly as possible to the "proxmox-iso" source.                  #
+# ============================================================================================= #
+#------------⬎
 
 locals {
 
   kickstart_file = (
-    var.packer_image.install_method != "kickstart" ? null : [
+    var.packer_image.install_method != "kickstart" ? [] : [
       {
         cd_files             = null
         index                = 1
@@ -26,32 +27,37 @@ locals {
         cd_label          = "OEMDRV"
         cd_content        = {
           "/ks.cfg" = templatefile(
-            "${abspath(path.root)}/templates/ks.pkrtpl.hcl",
+            "${abspath(path.root)}/data/ks.pkrtpl.hcl",
             {
-              additional_packages  = join(" ", var.packer_image.additional_packages)
+              additional_packages  = join(" ", coalesce(var.packer_image.additional_packages, []))
               deploy_user_name     = var.deploy_user_name
               deploy_user_password = var.deploy_user_password
               deploy_user_key      = var.deploy_user_key
               os_language          = local.packer_image.os_language
               os_keyboard          = local.packer_image.os_keyboard
               os_timezone          = local.packer_image.os_timezone
-
-              # Networking Settings
-              device       = (
-                var.network_adapters[0].mac_address != null && var.network_adapters[0].mac_address != ""
-                ? var.network_adapters[0].mac_address
-                : "link"
+              network = templatefile(
+                "${abspath(path.root)}/data/network.pkrtpl.hcl",
+                {
+                  device       = (
+                    var.network_adapters[0].mac_address != null && var.network_adapters[0].mac_address != ""
+                    ? var.network_adapters[0].mac_address
+                    : "link"
+                  )
+                  ipv4_address = var.network_adapters[0].ipv4_address
+                  ipv4_netmask = var.network_adapters[0].ipv4_netmask
+                  ipv4_gateway = var.network_adapters[0].ipv4_gateway
+                  dns          = var.network_adapters[0].dns
+                }
               )
-              ipv4_address = var.network_adapters[0].ipv4_address
-              ipv4_netmask = var.network_adapters[0].ipv4_netmask
-              ipv4_gateway = var.network_adapters[0].ipv4_gateway
-              dns          = var.network_adapters[0].dns
-
-              # Storage Settings
-              swap               = var.vm_disk_use_swap
-              partitions         = var.vm_disk_partitions
-              lvm                = var.vm_disk_lvm
-
+              storage              = templatefile(
+                "${abspath(path.root)}/data/storage.pkrtpl.hcl",
+                {
+                  swap               = var.vm_disk_use_swap
+                  partitions         = var.vm_disk_partitions
+                  lvm                = var.vm_disk_lvm
+                }
+              )
             }
           ) #"/ks.cfg"
         } #data_source_content
@@ -68,17 +74,11 @@ locals {
     install_method           = var.packer_image.install_method
 
     # Template Metadata
-    os_language              = coalesce(
-      var.packer_image.os_language,
-      var.packer_image.os_family == "windows" ? "en-US" : "en_US.UTF-8"
-    )
-    os_keyboard              = coalesce(
-      var.packer_image.os_language,
-      var.packer_image.os_family == "windows" ? "en-US" : "en_US.UTF-8"
-    )
-    os_timezone              = coalesce(var.packer_image.os_timezone,"UTC")
+    os_language              = coalesce(var.packer_image.os_language, "en_US")
+    os_keyboard              = coalesce(var.packer_image.os_keyboard, "us"   )
+    os_timezone              = coalesce(var.packer_image.os_timezone, "UTC"  )
     os_family                = var.packer_image.os_family
-    os_distribution          = var.packer_image.os_distribution
+    os_name                  = var.packer_image.os_name
     os_version               = var.packer_image.os_version
 
     # General Settings
@@ -96,35 +96,25 @@ locals {
 
     # Misc Settings
     disable_kvm              = coalesce(var.packer_image.disable_kvm, false)
-    machine                  = coalesce(
-                                var.packer_image.machine,
-                                (
-                                  var.packer_image.os_family == "windows" &&
-                                  contains(
-                                    ["xp","w2k","w2k3","w2k8","vista","win7","win8"],
-                                    var.packer_image.os
-                                  )
-                                ) ? "pc" : null,
-                                "q35"
-                              )
+    machine                  = coalesce(var.packer_image.machine, "q35")
     os                       = var.packer_image.os
-    task_timeout             = coalesce(var.packer_image.task_timeout, "5m")
+    task_timeout             = coalesce(var.packer_image.task_timeout, "30m")
 
     # VM Configuration: Boot Settings
     bios                     = coalesce(var.packer_image.bios, "ovmf")
-    boot                     = coalesce(var.packer_image.boot, "order=virtio0;ide2;net0")
+    boot                     = coalesce(var.packer_image.boot, "order=scsi2;scsi0;net0")
     boot_command             = coalesce(var.packer_image.boot_command, [])
     boot_key_interval        = var.packer_image.boot_key_interval == null ? null : var.packer_image.boot_key_interval
     boot_keygroup_interval   = var.packer_image.boot_keygroup_interval == null ? null : var.packer_image.boot_keygroup_interval
     boot_wait                = coalesce(var.packer_image.boot_wait, "10s")
-    onboot                   = false
+    onboot                   = coalesce(var.packer_image.onboot, false)
 
     # VM Configuration: Cloud-Init
     cloud_init                = coalesce(var.packer_image.cloud_init, true)
     cloud_init_disk_type      = coalesce(var.packer_image.cloud_init_disk_type, "scsi")
     cloud_init_storage_pool   = coalesce(
                                   var.packer_image.cloud_init_storage_pool,
-                                  var.disks[0].storage_pool
+                                  local.disks[0].storage_pool
                                 )
 
     # Hardware: CPU
@@ -157,7 +147,7 @@ locals {
         iso_file              = additional_iso_file.iso_file == null ? null : additional_iso_file.iso_file
         iso_storage_pool      = coalesce(
                                   additional_iso_file.iso_storage_pool,
-                                  var.disks[0].storage_pool
+                                  local.disks[0].storage_pool
                                 )
         iso_target_extension  = coalesce(additional_iso_file.iso_target_extension, "iso")
         iso_target_path       = additional_iso_file.iso_target_path == null ? null : additional_iso_file.iso_target_path
@@ -178,7 +168,7 @@ locals {
     iso_download_pve      = coalesce(var.boot_iso.iso_download_pve, false)
     iso_storage_pool      = coalesce(
                               var.boot_iso.iso_storage_pool,
-                              var.disks[0].storage_pool
+                              local.disks[0].storage_pool
                             )
     iso_target_extension  = coalesce(var.boot_iso.iso_target_extension, "iso")
     iso_target_path       = var.boot_iso.iso_target_path == null ? null : var.boot_iso.iso_target_path
@@ -209,7 +199,7 @@ locals {
       efi_format        = coalesce(var.efi_config.efi_format, "raw")
       efi_storage_pool  = coalesce(
                             var.efi_config.efi_storage_pool,
-                            var.disks[0].storage_pool
+                            local.disks[0].storage_pool
                           )
       efi_type          = coalesce(var.efi_config.efi_type, "4m")
       pre_enrolled_keys = coalesce(var.efi_config.pre_enrolled_keys, true)
@@ -230,7 +220,7 @@ locals {
       mtu           = coalesce(network_adapter.mtu, 1492)
       packet_queues = coalesce(
                         network_adapter.packet_queues,
-                        var.packer_image.cores
+                        local.packer_image.cores
                       )
       vlan_tag      = coalesce(network_adapter.vlan_tag, 666)
     }
@@ -266,7 +256,7 @@ locals {
     var.tpm_config == null ? null : {
       tpm_storage_pool  = coalesce(
                             var.tpm_config.tpm_storage_pool,
-                            var.disks[0].storage_pool
+                            local.disks[0].storage_pool
                           )
       tpm_version      = coalesce(var.tpm_config.tpm_version, "v2.0")
     }
@@ -279,3 +269,17 @@ locals {
   }
 
 }
+
+# locals {
+
+#   build_by          = "Built by: HashiCorp Packer ${packer.version}"
+#   build_date        =
+#   build_version     =
+#   build_description = "Version: ${local.build_version}\nBuilt on: ${local.build_date}\n${local.build_by}\nCloud-Init: ${var.vm_cloudinit}"
+#   vm_disk_type      = var.vm_disk_type == "virtio" ? "vda" : "sda"
+#   manifest_date     =
+#   manifest_path     = "${path.cwd}/manifests/"
+#   manifest_output   =
+
+#   vm_bios = var.vm_bios == "ovmf" ? var.vm_bios_firmware_path : null
+# }

@@ -1,21 +1,24 @@
-# ============================================================================================ #
-# - File: {root}\builds.pkr.hcl                                             | Version: v1.0.0  #
-# --- [ Description ] ------------------------------------------------------------------------ #
-#   Build definition to create a Proxmox VM template using proxmox-iso and Ansible             #
-# ============================================================================================ #
+# ============================================================================================= #
+# - File: .\builds.pkr.hcl                                                    | Version: v1.0.0 #
+# --- [ Description ] ------------------------------------------------------------------------- #
+#                                                                                               #
+# ============================================================================================= #
+
 
 # Build Definition to create the VM Template
 build {
 
-  sources = [ "source.proxmox-iso.packer_image" ]
+  sources = ["source.proxmox-iso.packer_image"]
 
   provisioner "ansible" {
     user                   = "${var.deploy_user_name}"
-    galaxy_file            = "${path.root}/ansible/linux-requirements.yml"
+    galaxy_file            = "${path.cwd}/ansible/linux-requirements.yml"
     galaxy_force_with_deps = true
-    playbook_file          = "${path.root}/ansible/linux-playbook.yml"
-    roles_path             = "${path.root}/ansible/roles"
-    ansible_env_vars = [ "ANSIBLE_CONFIG=${path.root}/ansible/ansible.cfg" ]
+    playbook_file          = "${path.cwd}/ansible/linux-playbook.yml"
+    roles_path             = "${path.cwd}/ansible/roles"
+    ansible_env_vars = [
+      "ANSIBLE_CONFIG=${path.cwd}/ansible/ansible.cfg"
+    ]
     extra_arguments = [
       # Declare Connection Settings
       "--extra-vars", "ansible_user=${var.deploy_user_name}",
@@ -23,14 +26,14 @@ build {
 
       # Provide Variables Needed In Playbook
       "--extra-vars", "deploy_user_key='${var.deploy_user_key}'",
-      "--extra-vars", "enable_cloudinit=${var.packer_image.cloud_init}"
+      "--extra-vars", "enable_cloudinit='${var.packer_image.cloud_init}'"
     ]
   }
 
   post-processor "manifest" {
     output     = join(
       "",
-      [path.cwd, "/artifacts/", formatdate("YYYY-MM-DD_HH-mm-ss", timestamp()), ".json"]
+      [path.cwd, "/manifests/", formatdate("YYYY-MM-DD_HH-mm-ss", timestamp()), ".json"]
     )
     strip_path = true
     strip_time = true
