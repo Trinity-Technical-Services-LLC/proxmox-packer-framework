@@ -119,7 +119,7 @@ logvol
 skipx
 
 ### Install Core Package(s)
-%packages --ignoremissing --excludedocs
+%packages --ignoremissing --excludedocs --exclude-weakdeps --inst-langs=en_US
   @^minimal-environment
   -iwl*firmware
   qemu-guest-agent
