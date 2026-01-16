@@ -35,28 +35,23 @@ locals {
               os_language          = local.packer_image.os_language
               os_keyboard          = local.packer_image.os_keyboard
               os_timezone          = local.packer_image.os_timezone
-              network = templatefile(
-                "${abspath(path.root)}/data/network.pkrtpl.hcl",
-                {
-                  device       = (
-                    var.network_adapters[0].mac_address != null && var.network_adapters[0].mac_address != ""
-                    ? var.network_adapters[0].mac_address
-                    : "link"
-                  )
-                  ipv4_address = var.network_adapters[0].ipv4_address
-                  ipv4_netmask = var.network_adapters[0].ipv4_netmask
-                  ipv4_gateway = var.network_adapters[0].ipv4_gateway
-                  dns          = var.network_adapters[0].dns
-                }
+
+              # Networking Information
+              device       = (
+                var.network_adapters[0].mac_address != null && var.network_adapters[0].mac_address != ""
+                ? var.network_adapters[0].mac_address
+                : "link"
               )
-              storage              = templatefile(
-                "${abspath(path.root)}/data/storage.pkrtpl.hcl",
-                {
-                  swap               = var.vm_disk_use_swap
-                  partitions         = var.vm_disk_partitions
-                  lvm                = var.vm_disk_lvm
-                }
-              )
+              ipv4_address = var.network_adapters[0].ipv4_address
+              ipv4_netmask = var.network_adapters[0].ipv4_netmask
+              ipv4_gateway = var.network_adapters[0].ipv4_gateway
+              dns          = var.network_adapters[0].dns
+
+              # Drive Information
+              swap               = var.vm_disk_use_swap
+              partitions         = var.vm_disk_partitions
+              lvm                = var.vm_disk_lvm
+
             }
           ) #"/ks.cfg"
         } #data_source_content
