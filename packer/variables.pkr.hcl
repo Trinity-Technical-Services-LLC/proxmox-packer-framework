@@ -28,7 +28,6 @@
     description = "true/false to skip Proxmox TLS certificate checks."
     type        = bool
     default     = false
-    sensitive   = true
   }
 
 #endregion --- [ Proxmox Settings ] ----------------------------------------------------------- #
@@ -57,7 +56,7 @@
 
 #region ------ [ Packer Image ] --------------------------------------------------------------- #
 
-  variable packer_image {
+  variable "packer_image" {
     description = ""
     type = object({
 
