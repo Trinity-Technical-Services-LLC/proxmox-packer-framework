@@ -18,7 +18,7 @@ packer_image = {
   os_timezone               = null
   os_family                 = "linux"
   os_distribution           = "rocky"
-  os_version                = "9.7"
+  os_version                = "9.6"
 
   # General Settings
   template_description      = "Rocky Linux 9 Template built with Packer"
@@ -316,3 +316,4 @@ vm_disk_lvm = [
 
 
 #endregion --- [ Disks & Partitions ] --------------------------------------------------------- #
+
