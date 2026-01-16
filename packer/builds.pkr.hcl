@@ -12,12 +12,12 @@ build {
 
   provisioner "ansible" {
     user                   = "${var.deploy_user_name}"
-    galaxy_file            = "${path.cwd}/ansible/linux-requirements.yml"
+    galaxy_file            = "${path.root}/ansible/linux-requirements.yml"
     galaxy_force_with_deps = true
-    playbook_file          = "${path.cwd}/ansible/linux-playbook.yml"
-    roles_path             = "${path.cwd}/ansible/roles"
+    playbook_file          = "${path.root}/ansible/linux-playbook.yml"
+    roles_path             = "${path.root}/ansible/roles"
     ansible_env_vars = [
-      "ANSIBLE_CONFIG=${path.cwd}/ansible/ansible.cfg"
+      "ANSIBLE_CONFIG=${path.root}/ansible/ansible.cfg"
     ]
     extra_arguments = [
       # Declare Connection Settings
@@ -33,7 +33,7 @@ build {
   post-processor "manifest" {
     output     = join(
       "",
-      [path.cwd, "/manifests/", formatdate("YYYY-MM-DD_HH-mm-ss", timestamp()), ".json"]
+      [path.root, "/manifests/", formatdate("YYYY-MM-DD_HH-mm-ss", timestamp()), ".json"]
     )
     strip_path = true
     strip_time = true
