@@ -26,7 +26,7 @@ locals {
         cd_label          = "OEMDRV"
         cd_content        = {
           "/ks.cfg" = templatefile(
-            "${abspath(path.root)}/data/ks.pkrtpl.hcl",
+            "${abspath(path.root)}/templates/ks.pkrtpl.hcl",
             {
               additional_packages  = join(" ", coalesce(var.packer_image.additional_packages, []))
               deploy_user_name     = var.deploy_user_name
