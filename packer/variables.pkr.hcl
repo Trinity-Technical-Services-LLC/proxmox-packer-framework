@@ -276,83 +276,70 @@
 
 #region ------ [ Virtual Machine (VM) Settings ] ---------------------------------------------- #
 
-    # variable "vm_disk_partitions" {
-    #   type = list(object({
-    #     name = string
-    #     size = number
-    #     format = object({
-    #       label  = string
-    #       fstype = string
-    #     })
-    #     mount = object({
-    #       path    = string
-    #       options = string
-    #     })
-    #     volume_group = string
-    #   }))
-    #   description = "The disk partitions for the virtual disk."
-    # }
-
-    # variable "vm_disk_lvm" {
-    #   type = list(object({
-    #     name    = string
-    #     partitions = list(object({
-    #       name = string
-    #       size = number
-    #       format = object({
-    #         label  = string
-    #         fstype = string
-    #       })
-    #       mount = object({
-    #         path    = string
-    #         options = string
-    #       })
-    #     }))
-    #   }))
-    #   description = "The LVM configuration for the virtual disk."
-    #   default     = []
-    # }
-
-  #endregion --- [ Virtual Machine (VM) Settings - Storage ] ---------------------------------- #
-
 variable "vm_disk_use_swap" {
   type        = bool
   description = "Whether to use a swap partition."
 }
 
-variable "vm_disk_partitions" {
-  type = list(object({
-    name = string
-    size = number
-    format = object({
-      label  = string
-      fstype = string
-    })
-    mount = object({
-      path    = string
-      options = string
-    })
-    volume_group = string
-  }))
-  description = "The disk partitions for the virtual disk."
+variable "vm_storage" {
+  description = "Disk + partition + LVM layout for the VM."
+  type = object({
+    disks = list(object({
+      device = string # e.g. "sda", "sdb"
+
+      # Normal (non-LVM) partitions that will be mounted directly
+      partitions = list(object({
+        name = string
+        size = number # MiB (or whatever your template assumes)
+
+        format = object({
+          label  = string
+          fstype = string
+        })
+
+        mount = object({
+          path    = string
+          options = string
+        })
+      }))
+
+      # LVM physical volumes (PVs) that belong to a VG
+      pvs = list(object({
+        name         = string
+        size         = number
+        volume_group = string
+      }))
+    }))
+
+    # Volume groups + logical volumes (LVs)
+    volume_groups = list(object({
+      name = string
+
+      logical_volumes = list(object({
+        name = string
+        size = number
+
+        format = object({
+          label  = string
+          fstype = string
+        })
+
+        mount = object({
+          path    = string
+          options = string
+        })
+      }))
+    }))
+  })
+
+  # Defaults make the variable optional, but remember:
+  # overriding nested objects requires providing full required structure.
+  default = {
+    disks         = []
+    volume_groups = []
+  }
 }
 
-variable "vm_disk_lvm" {
-  type = list(object({
-    name    = string
-    partitions = list(object({
-      name = string
-      size = number
-      format = object({
-        label  = string
-        fstype = string
-      })
-      mount = object({
-        path    = string
-        options = string
-      })
-    }))
-  }))
-  description = "The LVM configuration for the virtual disk."
-  default     = []
-}
+
+#endregion --- [ Virtual Machine (VM) Settings - Storage ] ---------------------------------- #
+
