@@ -4,7 +4,6 @@
 #   The locals file is the "brains" of the playbook. It's responsible for building the final    #
 # object that gets passed as directly as possible to the "proxmox-iso" source.                  #
 # ============================================================================================= #
-#------------⬎
 
 locals {
 
@@ -177,7 +176,6 @@ locals {
     unmount               = coalesce(var.boot_iso.unmount, true)
   }
 
-
   disks = [
     for disk in var.disks : {
       asyncio             = coalesce(disk.asyncio, "io_uring")
@@ -193,7 +191,6 @@ locals {
     }
   ]
 
-
   efi_config = var.packer_image.bios == "seabios" ? null : (
     var.efi_config == null ? null : {
       efi_format        = coalesce(var.efi_config.efi_format, "raw")
@@ -205,7 +202,6 @@ locals {
       pre_enrolled_keys = coalesce(var.efi_config.pre_enrolled_keys, true)
     }
   )
-
 
   network_adapters = [
     for network_adapter in var.network_adapters : {
@@ -226,7 +222,6 @@ locals {
     }
   ]
 
-
   pci_devices = [
     for pci_device in var.pci_devices : {
       host          = pci_device.host
@@ -244,13 +239,11 @@ locals {
     }
   ]
 
-
   rng0 = var.rng0 == null ? null : {
     source    = coalesce(var.rng0.source, "/dev/urandom")
     max_bytes = coalesce(var.rng0.max_bytes, 1024)
     period    = coalesce(var.rng0.period, 1000)
   }
-
 
   tpm_config = var.packer_image.bios == "seabios" ? null : (
     var.tpm_config == null ? null : {
@@ -262,24 +255,9 @@ locals {
     }
   )
 
-
   vga = var.vga == null ? null : {
     type    = coalesce(var.vga.type, "virtio")
     memory  = var.vga.memory == null ? null : var.vga.memory
   }
 
 }
-
-# locals {
-
-#   build_by          = "Built by: HashiCorp Packer ${packer.version}"
-#   build_date        =
-#   build_version     =
-#   build_description = "Version: ${local.build_version}\nBuilt on: ${local.build_date}\n${local.build_by}\nCloud-Init: ${var.vm_cloudinit}"
-#   vm_disk_type      = var.vm_disk_type == "virtio" ? "vda" : "sda"
-#   manifest_date     =
-#   manifest_path     = "${path.cwd}/manifests/"
-#   manifest_output   =
-
-#   vm_bios = var.vm_bios == "ovmf" ? var.vm_bios_firmware_path : null
-# }
